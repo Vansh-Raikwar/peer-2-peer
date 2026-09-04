@@ -1,6 +1,6 @@
 # P2P File Sharing Application
 
-A peer-to-peer file sharing application built with React, TypeScript, WebRTC, and WebSocket. Share files directly between browsers with encrypted, serverless transfers.
+A peer-to-peer file sharing application built with React, JavaScript, WebRTC, and WebSocket. Share files directly between browsers with encrypted, serverless transfers.
 
 ## Features
 
@@ -43,7 +43,7 @@ See `architecture.md` for a detailed explanation of the signaling server and the
 
 **Frontend:**
 
-- React 18 with TypeScript
+- React 18 with JavaScript
 - Vite (Build tool)
 - TailwindCSS (Styling)
 - WebRTC (P2P connections)
@@ -53,7 +53,7 @@ See `architecture.md` for a detailed explanation of the signaling server and the
 
 - Node.js + Express
 - ws (WebSocket library)
-- TypeScript
+- JavaScript
 
 ## Prerequisites
 
@@ -123,7 +123,7 @@ p2psharing/
 ├── server/                     # Signaling server
 │   ├── src/
 │   │   ├── server.ts          # WebSocket server implementation
-│   │   └── types.ts           # TypeScript types
+│   │   └── types.ts           # JavaScript types
 │   ├── .env.example
 │   ├── package.json
 │   └── tsconfig.json
@@ -261,4 +261,4 @@ VITE_WS_URL=ws://localhost:3001    # WebSocket server URL
 
 ---
 
-Made with React, TypeScript, and WebRTC
+Made with React, JavaScript, and WebRTC
