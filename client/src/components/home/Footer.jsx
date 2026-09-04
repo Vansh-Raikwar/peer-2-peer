@@ -32,7 +32,7 @@ export default function Footer() {
               Terms
             </a>
             <a
-              href="https://github.com/Vansh-Raikwar/peerDrop.git"
+              href="https://github.com/Vansh-Raikwar/peer-2-peer.git"
               id="footer-github"
               className="transition-colors hover:text-foreground"
               target="_blank"
