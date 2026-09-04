@@ -1,0 +1,327 @@
+import { WebSocketServer } from "ws";
+import { v4 as uuid } from "uuid";
+import dotenv from "dotenv";
+import http from "http";
+
+dotenv.config();
+
+const PORT = Number(process.env.PORT ?? 8080);
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200);
+    res.end("OK");
+    return;
+  }
+
+  res.writeHead(404);
+  res.end();
+});
+
+const wss = new WebSocketServer({ server });
+
+let users = [];
+
+function broadcastOnlineUsers() {
+  users.forEach((user) => {
+    const filtered = users
+      .filter((u) => u.id !== user.id)
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        deviceName: u.deviceInfo?.deviceName,
+        deviceModel: u.deviceInfo?.deviceModel,
+        manufacturer: u.deviceInfo?.manufacturer,
+      }));
+
+    user.ws.send(
+      JSON.stringify({
+        type: "online-users",
+        users: filtered,
+      })
+    );
+  });
+}
+
+wss.on("connection", (ws, req) => {
+  // Parse name from URL query params
+  const url = new URL(req.url || "", `http://${req.headers.host}`);
+  const nameParam = url.searchParams.get("name");
+
+  const newUser = {
+    id: uuid(),
+    ws,
+  };
+
+  if (nameParam) {
+    newUser.name = nameParam;
+  }
+
+  users.push(newUser);
+
+  console.log("New connection:", newUser.id, "name:", nameParam);
+
+  newUser.ws.send(
+    JSON.stringify({
+      type: "your-id",
+      id: newUser.id,
+      name: newUser.name,
+    })
+  );
+
+  broadcastOnlineUsers();
+
+  ws.on("message", (message) => {
+    let data;
+
+    try {
+      data = JSON.parse(message.toString());
+    } catch (error) {
+      console.error("Invalid JSON message:", error);
+      return;
+    }
+
+    // Mobile device registration
+    if (data.type === "register-device") {
+      const user = users.find((u) => u.id === newUser.id);
+
+      if (user && data.deviceInfo) {
+        user.deviceInfo = data.deviceInfo;
+
+        console.log(
+          `Device registered for ${user.id}:`,
+          data.deviceInfo
+        );
+
+        broadcastOnlineUsers();
+      }
+    }
+
+    // Update name
+    if (data.type === "register-name") {
+      const user = users.find((u) => u.id === newUser.id);
+
+      if (user && data.name) {
+        user.name = data.name;
+
+        console.log(
+          `Name updated for ${user.id}:`,
+          data.name
+        );
+
+        broadcastOnlineUsers();
+      }
+    }
+
+    // Request connection
+    if (data.type === "request-connection") {
+      const target = users.find((u) => u.id === data.to);
+
+      if (target) {
+        target.ws.send(
+          JSON.stringify({
+            type: "incoming-request",
+            from: newUser.id,
+            fromName: newUser.name,
+            deviceInfo: newUser.deviceInfo,
+          })
+        );
+      }
+    }
+
+    // Accept connection
+    if (data.type === "accept-connection") {
+      const roomId = uuid();
+
+      const requester = users.find(
+        (u) => u.id === data.from
+      );
+
+      const receiver = newUser;
+
+      if (!requester) {
+        receiver.ws.send(
+          JSON.stringify({
+            type: "connection-timeout",
+            from: data.from,
+          })
+        );
+
+        return;
+      }
+
+      requester.ws.send(
+        JSON.stringify({
+          type: "webrtc-start",
+          roomId,
+          otherUser: receiver.id,
+          isCaller: true,
+        })
+      );
+
+      receiver.ws.send(
+        JSON.stringify({
+          type: "webrtc-start",
+          roomId,
+          otherUser: requester.id,
+          isCaller: false,
+        })
+      );
+    }
+
+    // WebRTC offer
+    if (data.type === "offer") {
+      const target = users.find(
+        (u) => u.id === data.to
+      );
+
+      target?.ws.send(
+        JSON.stringify({
+          type: "offer",
+          from: newUser.id,
+          sdp: data.sdp,
+        })
+      );
+    }
+
+    // WebRTC answer
+    if (data.type === "answer") {
+      const target = users.find(
+        (u) => u.id === data.to
+      );
+
+      target?.ws.send(
+        JSON.stringify({
+          type: "answer",
+          from: newUser.id,
+          sdp: data.sdp,
+        })
+      );
+    }
+
+    // ICE candidate
+    if (data.type === "ice-candidate") {
+      const target = users.find(
+        (u) => u.id === data.to
+      );
+
+      target?.ws.send(
+        JSON.stringify({
+          type: "ice-candidate",
+          from: newUser.id,
+          candidate: data.candidate,
+        })
+      );
+    }
+
+    // Peer disconnect
+    if (data.type === "peer-disconnect") {
+      const target = users.find(
+        (u) => u.id === data.to
+      );
+
+      if (target) {
+        target.ws.send(
+          JSON.stringify({
+            type: "peer-disconnect",
+            from: newUser.id,
+          })
+        );
+      }
+    }
+
+    // Connection timeout
+    if (data.type === "connection-timeout") {
+      const target = users.find(
+        (u) => u.id === data.to
+      );
+
+      if (target) {
+        target.ws.send(
+          JSON.stringify({
+            type: "connection-timeout",
+            from: newUser.id,
+          })
+        );
+      }
+    }
+
+    // Cancel connection
+    if (data.type === "cancel-connection") {
+      const target = users.find(
+        (u) => u.id === data.to
+      );
+
+      if (target) {
+        target.ws.send(
+          JSON.stringify({
+            type: "cancel-connection",
+            from: newUser.id,
+          })
+        );
+      }
+    }
+
+    // Reject connection
+    if (data.type === "reject-connection") {
+      const target = users.find(
+        (u) => u.id === data.to
+      );
+
+      if (target) {
+        target.ws.send(
+          JSON.stringify({
+            type: "connection-rejected",
+            from: newUser.id,
+          })
+        );
+      }
+    }
+
+    // Relay fallback
+    if (
+      data.type &&
+      data.type.startsWith("relay-")
+    ) {
+      const target = users.find(
+        (u) => u.id === data.to
+      );
+
+      if (target) {
+        target.ws.send(
+          JSON.stringify({
+            ...data,
+            from: newUser.id,
+          })
+        );
+      }
+    }
+  });
+
+  ws.on("close", () => {
+    users = users.filter(
+      (u) => u.id !== newUser.id
+    );
+
+    broadcastOnlineUsers();
+
+    console.log(
+      "Connection closed:",
+      newUser.id
+    );
+  });
+
+  ws.on("error", (error) => {
+    console.error(
+      `WebSocket error for ${newUser.id}:`,
+      error
+    );
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(
+    "HTTP + WebSocket server running on port " +
+      PORT
+  );
+});

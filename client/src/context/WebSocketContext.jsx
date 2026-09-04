@@ -1,0 +1,246 @@
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { WSClient } from "../core/ws";
+import { WebRTCManager } from "../core/webrtc";
+
+const WSContext = createContext({
+  myId: "",
+  myName: "",
+  users: [],
+  incomingRequest: null,
+  incomingRequestName: null,
+  connectedRoom: null,
+  isCaller: false,
+  rtc: null,
+  targetUser: null,
+  sendConnectionRequest: () => {},
+  acceptRequest: () => {},
+  rejectRequest: () => {},
+  cancelConnectionRequest: () => {},
+  disconnectPeer: () => {},
+  setMyName: () => {},
+});
+
+export const useWS = () => useContext(WSContext);
+
+export function WSProvider({ children, name }) {
+  const [ws] = useState(() => new WSClient(name));
+  const [myId, setMyId] = useState("");
+  const [myName, setMyNameState] = useState(name);
+  const [users, setUsers] = useState([]);
+  const [incomingRequest, setIncomingRequest] = useState(null);
+  const [incomingRequestName, setIncomingRequestName] = useState(null);
+  const [connectedRoom, setConnectedRoom] = useState(null);
+
+  const [isCaller, setIsCaller] = useState(false);
+  const [targetUser, setTargetUser] = useState(null);
+
+  const [rtc, setRtc] = useState(null);
+  const rtcRef = useRef(null);
+
+  // Function to update name (for edits)
+  function setMyName(newName) {
+    setMyNameState(newName);
+    localStorage.setItem("peerly-username", newName);
+    if (ws.ws.readyState === WebSocket.OPEN) {
+      ws.send("register-name", { name: newName });
+    }
+  }
+
+  // handle user disconnects
+  useEffect(() => {
+    if (!targetUser || !connectedRoom) return;
+
+    const stillOnline = users.some((u) => u.id === targetUser);
+    if (!stillOnline) {
+      rtcRef.current?.peer.close();
+      rtcRef.current = null;
+      setRtc(null);
+      setConnectedRoom(null);
+    }
+  }, [users, targetUser, connectedRoom]);
+
+  useEffect(() => {
+    ws.ws.onmessage = async (event) => {
+      const data = JSON.parse(event.data);
+
+      // my assigned id from server
+      if (data.type === "your-id") {
+        setMyId(data.id);
+        return;
+      }
+
+      //online users list update
+      if (data.type === "online-users") {
+        setUsers(data.users);
+        return;
+      }
+
+      // incoming connection request(from another user)
+      if (data.type === "incoming-request") {
+        setIncomingRequest(data.from);
+        setIncomingRequestName(data.fromName || null);
+        return;
+      }
+
+      // peer disconnected or connection ended
+      if (
+        data.type === "peer-disconnect" ||
+        data.type === "connection-timeout"
+      ) {
+        rtcRef.current?.peer.close();
+        rtcRef.current = null;
+        setRtc(null);
+        setConnectedRoom(null);
+        setIncomingRequest(null);
+        setIsCaller(false);
+        setTargetUser(null);
+        return;
+      }
+
+      // sender cancelled the connection request
+      if (data.type === "cancel-connection") {
+        alert("Connection request was cancelled by the sender.");
+        setIncomingRequest(null);
+        setTargetUser(null);
+        return;
+      }
+
+      // webrtc start - both sides
+      if (data.type === "webrtc-start") {
+        setConnectedRoom(data.roomId);
+        setTargetUser(data.otherUser);
+        setIsCaller(data.isCaller);
+
+        const connection = new WebRTCManager();
+        await connection.initCrypto(data.roomId);
+        rtcRef.current = connection;
+        setRtc(connection);
+
+        connection.sendRelayMessage = (msg) => {
+          ws.send(msg.type, { ...msg, to: data.otherUser });
+        };
+
+        connection.onIceCandidate = (candidate) => {
+          ws.send("ice-candidate", {
+            to: data.otherUser,
+            candidate,
+          });
+        };
+
+        //offer created by caller
+        if (data.isCaller) {
+          const offer = await connection.createOffer();
+          ws.send("offer", {
+            to: data.otherUser,
+            sdp: offer,
+          });
+        }
+
+        return;
+      }
+
+      // connection request rejected by receiver
+      if (data.type === "connection-rejected") {
+        alert("Connection request rejected");
+        setIsCaller(false);
+        setConnectedRoom(null);
+        setTargetUser(null);
+        rtcRef.current = null;
+        setRtc(null);
+        return;
+      }
+
+      // RELAY FALLBACK: Route incoming relay messages to WebRTCManager
+      if (data.type && data.type.startsWith("relay-") && rtcRef.current) {
+        rtcRef.current.handleRelayMessage(data);
+        return;
+      }
+
+      // receiver sends in response to caller
+      if (data.type === "offer" && rtcRef.current) {
+        await rtcRef.current.setRemoteDescription(data.sdp);
+        const answer = await rtcRef.current.createAnswer();
+        ws.send("answer", {
+          to: data.from,
+          sdp: answer,
+        });
+        return;
+      }
+
+      // caller sends in response to receiver
+      if (data.type === "answer" && rtcRef.current) {
+        await rtcRef.current.setRemoteDescription(data.sdp);
+        return;
+      }
+
+      //ice-candidate(both sides)
+      if (data.type === "ice-candidate" && rtcRef.current) {
+        await rtcRef.current.addIceCandidate(data.candidate);
+        return;
+      }
+    };
+  }, [ws]);
+
+  // user-actions
+  function sendConnectionRequest(to) {
+    setIsCaller(true);
+    setTargetUser(to);
+    ws.send("request-connection", { to });
+  }
+
+  function acceptRequest(from) {
+    setIsCaller(false);
+    setTargetUser(from);
+    ws.send("accept-connection", { from });
+    setIncomingRequest(null);
+  }
+
+  function rejectRequest(from) {
+    ws.send("reject-connection", { to: from });
+    setIncomingRequest(null);
+  }
+
+  function cancelConnectionRequest() {
+    if (targetUser) {
+      ws.send("cancel-connection", { to: targetUser });
+    }
+    setIsCaller(false);
+    setTargetUser(null);
+  }
+
+  function disconnectPeer() {
+    if (targetUser) {
+      ws.send("peer-disconnect", { to: targetUser });
+    }
+    rtc?.peer.close();
+    setRtc(null);
+    setConnectedRoom(null);
+    setIsCaller(false);
+    setTargetUser(null);
+    setIncomingRequest(null);
+  }
+
+  return (
+    <WSContext.Provider
+      value={{
+        myId,
+        myName,
+        users,
+        incomingRequest,
+        incomingRequestName,
+        connectedRoom,
+        isCaller,
+        rtc,
+        targetUser,
+        sendConnectionRequest,
+        acceptRequest,
+        rejectRequest,
+        cancelConnectionRequest,
+        disconnectPeer,
+        setMyName,
+      }}
+    >
+      {children}
+    </WSContext.Provider>
+  );
+}

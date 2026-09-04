@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import "tailwindcss";
+
+:root, .dark {
+  --bg-main: #090909;
+  --text-main: #ffffff;
+  --card-main: #111111;
+  --elevated-main: #161616;
+  --accent-main: #4F8CFF;
+  --muted-main: #9CA3AF;
+  --subtle-main: #6B7280;
+  --border-main: rgba(255, 255, 255, 0.08);
+  --grid-line: rgba(255, 255, 255, 0.025);
+  --glass-bg: rgba(17, 17, 17, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --radial-glow: rgba(79, 140, 255, 0.04);
+}
+
+.light {
+  --bg-main: #fafafa;
+  --text-main: #09090b;
+  --card-main: #ffffff;
+  --elevated-main: #f4f4f5;
+  --accent-main: #2563eb;
+  --muted-main: #4b5563;
+  --subtle-main: #6b7280;
+  --border-main: rgba(0, 0, 0, 0.08);
+  --grid-line: rgba(0, 0, 0, 0.04);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --radial-glow: rgba(37, 99, 235, 0.06);
+}
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --color-background: var(--bg-main);
+  --color-foreground: var(--text-main);
+  --color-card: var(--card-main);
+  --color-elevated: var(--elevated-main);
+  --color-accent: var(--accent-main);
+  --color-muted: var(--muted-main);
+  --color-subtle: var(--subtle-main);
+  --color-border: var(--border-main);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+  letter-spacing: -0.011em;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+::selection {
+  background-color: rgba(79, 140, 255, 0.2);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--subtle-main); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-main); }
+
+/* Grid Background */
+.grid-bg {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+/* Glassmorphism */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+}
+
+/* Glow button hover */
+.glow-btn {
+  position: relative;
+}
+.glow-btn:hover {
+  box-shadow: 0 0 24px var(--accent-main);
+}
+
+/* Keyframes */
+@keyframes flow {
+  0% { left: 0%; opacity: 0; }
+  5% { opacity: 1; }
+  95% { opacity: 1; }
+  100% { left: calc(100% - 8px); opacity: 0; }
+}
+
+@keyframes radar-sweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-ring {
+  0% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
+  100% { opacity: 0.3; transform: scale(1); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.4); }
+}
+
+@keyframes tunnel-packet {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { opacity: 0; }
+}
